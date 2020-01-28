@@ -71,7 +71,7 @@ def parseAllHtml(pathToRead, pathToWrite, moveOldFiles = False ):
                     if moveOldFiles:
                         os.rename(h,Path("Processed") / h)
     return(n)
-    
+     
                         
 
                     
