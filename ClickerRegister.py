@@ -1,18 +1,20 @@
 from zipfile import ZipFile as _ZipFile 
 from xml.dom import minidom as _minidom
+from pathlib import Path
 import openpyxl
 import re
 import copy
+import os
 
 """
 Read in TurningPoint file, course ID and file with student names and return a spreadsheet with the students
 on the course and present or absent based on the clicker ID data
 
-input: TurningPOint file name, courseID, spreadsheet with ID's
+input: TurningPoint file name, spreadsheet with ID's
 output: spreadsheet with names and present/absent
 """
-def ClickeRegister(turningPointFileName, courseID, studentFile = "/Volumes/Schools/EPMS/HoS/School_Management/Student/27-1-20/Clicker Data CT Fixed (2).xlsx") : 
-
+def ClickerRegister(turningPointFileName):
+    
     # extract TTSession.xml
     tpFile = _ZipFile(turningPointFileName)
     tpFile.extract("TTSession.xml")
@@ -33,9 +35,9 @@ def ClickeRegister(turningPointFileName, courseID, studentFile = "/Volumes/Schoo
 
         iParticipants += 1 
         
-    print "Found ", iParticipants
+#    print "Found ", iParticipants
     
-#
+    return(devices)
      
 
 """
@@ -45,10 +47,10 @@ def ClickeRegister(turningPointFileName, courseID, studentFile = "/Volumes/Schoo
  output: dd-mm-yyyy
 """
 def getDate(fName):
-    import re
-    match = re.match(r'^\d\d-\d\d-\d\d\d\d',fName)
+    bName = os.path.basename(fName)
+    match = re.match(r'^\d\d-\d\d-\d\d\d\d',bName)
     if match:
-        return fName[:10]
+        return bName[:10]
     else:
         raise Exception("getDate: filename should start with dd-mm-yyyy")
         
@@ -62,7 +64,7 @@ def getDate(fName):
  output: dict as describe above    
 
 """        
-def buildStudentDict(filename):
+def buildStudentDict(filename): 
     
 # first worksheet has the useful data
     studentFile = openpyxl.load_workbook(filename,data_only=True)    
@@ -150,9 +152,11 @@ Create a spreadsheet with present/absent data
 
 """
 
-def createAttendanceSpreadsheet(collated):
+def createAttendanceSpreadsheet(collated,date,course,folder):
     wb = openpyxl.Workbook()
     ws = wb.create_sheet("Attendance")
+    names=("Date",date,"Module",course)
+    ws.append(names)
     names=("First name","Surname","Student ID","Clicker ID","Present",)
     ws.append(names)
     for k,v in collated.items():
@@ -163,7 +167,7 @@ def createAttendanceSpreadsheet(collated):
                 p = "No"
             thisRow = (v['First'], v['Surname'], k, v['clicker'],p)
             ws.append(thisRow)
-    thisRow = ("Students not registered but attended.")
+    thisRow = ("Students not registered on this module but attended.")
     ws.append(thisRow)
     for k,v in collated.items():
         if not v['Registered']:
@@ -173,11 +177,28 @@ def createAttendanceSpreadsheet(collated):
                 p = "No"
             thisRow = (v['First'], v['Surname'], k, v['clicker'],p)
             ws.append(thisRow)
+     
+    fname = course + "_" + date +".xlsx"   
             
-            
-    wb.save("Test.xlsx")
+    wb.save(Path(folder) / fname)
     
         
+"""
+Put everything together
+
+"""    
+def runThis(clickerFn,course, outputFolder, studentFn="/Volumes/Schools/EPMS/HoS/School_Management/Student/27-1-20/Clicker Data CT Fixed (2).xlsx"):
+    clickerIDs = ClickerRegister(clickerFn)
+    studentData = buildStudentDict(studentFn)
+    studentsOnThisCourse = selectCourseStudentData(studentData,course)
+    studentIDsAttending = selectIDStudentData(studentData,clickerIDs)
+    studentsAttending = collateStudentsInLecture(studentData,studentsOnThisCourse,studentIDsAttending)
+    thisDate = getDate(clickerFn)
+    createAttendanceSpreadsheet(studentsAttending,thisDate,course,outputFolder)
+    
+    
+    
+    
     
     
     
