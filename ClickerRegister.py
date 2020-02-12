@@ -7,11 +7,10 @@ import copy
 import os
 
 """
-Read in TurningPoint file, course ID and file with student names and return a spreadsheet with the students
-on the course and present or absent based on the clicker ID data
+Read in TurningPoint file and return list of clicker ID's
 
-input: TurningPoint file name, spreadsheet with ID's
-output: spreadsheet with names and present/absent
+input: TurningPoint file name
+output: list of clicker ID's
 """
 def ClickerRegister(turningPointFileName):
     
@@ -54,7 +53,53 @@ def getDate(fName):
     else:
         raise Exception("getDate: filename should start with dd-mm-yyyy")
         
-        
+"""
+ Return string of start time of lecture from a file name string
+ Assume filename is of form dd-mm-yyyy hh-mm.tpxz
+ input: filename
+ output: hh
+ 
+"""        
+def getStartHour(fName):
+    bName = os.path.basename(fName)
+    match = re.match(r'^\d\d-\d\d-\d\d\d\d\s\d\d-\d\d.tpzx$',bName)
+    if match:
+        return bName[11:13]
+    else:
+        raise Exception("getStartHour: filename should have format dd-mm-yyyy hh-mm.tpzx")
+
+"""
+ getActivityRoot create end of string for activity
+ input turningPointFilename
+ output string of form dd.<Mon>.yyyy_hh00
+"""         
+
+def getActivityRoot(turningPointFileName):
+    hour = getStartHour(turningPointFileName)
+    thisDateString = getDate(turningPointFileName)
+    theseMonths = {"01":"Jan",
+                    "02":"Feb",
+                    "03":"Mar",
+                    "04":"Apr",
+                    "05":"May",
+                    "06":"Jun",
+                    "07":"Jul",
+                    "08":"Aug",
+                    "09":"Sep",
+                    "10":"Oct",
+                    "11":"Nov",
+                    "12":"Dec"
+                    }
+
+    day = thisDateString[:2]
+    month = theseMonths[thisDateString[3:5]]
+    year = thisDateString[6:10]   
+   
+    activityRoot = day+"."+month+"."+year+"_"+hour+"00"
+    return(activityRoot)
+
+
+
 """
  Return dict with student data stored in a spreadsheet
  in particular 
@@ -114,7 +159,6 @@ def selectIDStudentData(data,IDs):
     studentIDs = []
     for k,v in data.items():
         if v['clicker'] in IDs:
-            print(k)
             studentIDs.append(k)
             
     return(studentIDs)     
@@ -152,31 +196,32 @@ Create a spreadsheet with present/absent data
 
 """
 
-def createAttendanceSpreadsheet(collated,date,course,folder):
+def createAttendanceSpreadsheet(collated,date,course,activity,CRN,folder):
     wb = openpyxl.Workbook()
-    ws = wb.create_sheet("Attendance")
-    names=("Date",date,"Module",course)
+    ws = wb.active()
+#    ws = wb.create_sheet("Attendance")
+    names=("Activity",activity,"CRN",CRN)
     ws.append(names)
-    names=("First name","Surname","Student ID","Clicker ID","Present",)
+    names=["First name","Surname","Student ID","Clicker ID","Present",]
     ws.append(names)
     for k,v in collated.items():
+
         if v['Registered']:
             if v["Present"]:
                 p = "Yes"
             else:
                 p = "No"
-            thisRow = (v['First'], v['Surname'], k, v['clicker'],p)
+            thisRow = [v['First'], v['Surname'], k, v['clicker'],p]
             ws.append(thisRow)
-    thisRow = ("Students not registered on this module but attended.")
-    ws.append(thisRow)
-    for k,v in collated.items():
-        if not v['Registered']:
-            if v["Present"]:
-                p = "Yes"
-            else:
-                p = "No"
-            thisRow = (v['First'], v['Surname'], k, v['clicker'],p)
-            ws.append(thisRow)
+#    thisRow = ["Students not registered on this module but attended.",]
+#    ws.append(thisRow)
+        
+#    for k,v in collated.items():
+#        if v["Present"]:
+#            if not v['Registered']:
+#                p = "Yes"
+#                thisRow = (v['First'], v['Surname'], k, v['clicker'],p)
+#                ws.append(thisRow)               
      
     fname = course + "_" + date +".xlsx"   
             
@@ -184,17 +229,39 @@ def createAttendanceSpreadsheet(collated,date,course,folder):
     
         
 """
+From the name of the TunrningPoint file and course
+identify the acivitity and CRN from the relevant file
+
+input : clickerFN, course, activityFN (spreadsheet)
+output: activity (string), CRN (string)
+"""
+def getActivityCRN(clickerFN,course,activityFN):
+    AR = getActivityRoot(clickerFN)
+
+# first worksheet has the useful data
+    activityFile = openpyxl.load_workbook(activityFN,data_only=True)    
+    ws = activityFile.worksheets[0]
+    
+    for row in ws.iter_rows(max_col=5,values_only=True):
+        c = row[1]
+        if ( c == course ):
+            if row[0].find(AR) > -1:
+                return((row[0], row[3]))
+
+   
+"""
 Put everything together
 
 """    
-def runThis(clickerFn,course, outputFolder, studentFn="/Volumes/Schools/EPMS/HoS/School_Management/Student/27-1-20/Clicker Data CT Fixed (2).xlsx"):
+def runThis(clickerFn,course, outputFolder, studentFn,activityFN):
+    (activity,CRN) = getActivityCRN(clickerFN,course,activityFN)
     clickerIDs = ClickerRegister(clickerFn)
     studentData = buildStudentDict(studentFn)
     studentsOnThisCourse = selectCourseStudentData(studentData,course)
     studentIDsAttending = selectIDStudentData(studentData,clickerIDs)
     studentsAttending = collateStudentsInLecture(studentData,studentsOnThisCourse,studentIDsAttending)
-    thisDate = getDate(clickerFn)
-    createAttendanceSpreadsheet(studentsAttending,thisDate,course,outputFolder)
+    date = getDate(clickerFn)
+    createAttendanceSpreadsheet(studentsAttending,date,course,activity,CRN,outputFolder)
     
     
     
